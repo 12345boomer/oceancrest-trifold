@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tri-fold 3D Viewer</title>
+<meta name="description" content="Interactive 3D preview of the OceanCrest AI tri-fold brochure. Spin it, fold it, and download the print PDF.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #e9eceb; --bg2: #dfe3e2; --ink: #121818; --muted: #5a6066; --line: #c9cfd1;
+    --btn: #ffffff; --btn-ink: #121818; --accent: #1b5c79; --accent-ink: #ffffff; --shadow: rgba(12,17,23,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151b22; --bg2: #0f141a; --ink: #eef2f4; --muted: #9aa6ad; --line: #2b343d;
+      --btn: #1d252e; --btn-ink: #eef2f4; --accent: #90d2ea; --accent-ink: #0c1117; --shadow: rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151b22; --bg2: #0f141a; --ink: #eef2f4; --muted: #9aa6ad; --line: #2b343d;
+    --btn: #1d252e; --btn-ink: #eef2f4; --accent: #90d2ea; --accent-ink: #0c1117; --shadow: rgba(0,0,0,.55);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: radial-gradient(ellipse at 50% 40%, var(--bg) 0%, var(--bg2) 100%); background-color: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; overflow-x: hidden; }
+
+  header { padding: 20px 24px 0; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  h1 { margin: 0; font: 400 30px/1.05 'Instrument Serif', serif; letter-spacing: -.01em; }
+  h1 em { color: var(--accent); }
+  .hint { font: 400 11px/1.4 'DM Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+  .stage { flex: 1; min-height: 420px; position: relative; perspective: 2400px; perspective-origin: 50% 40%; cursor: grab; touch-action: none; user-select: none; }
+  .stage:active { cursor: grabbing; }
+  .shadow { position: absolute; left: 50%; top: 50%; height: 60px; border-radius: 50%; background: radial-gradient(ellipse, var(--shadow) 0%, transparent 70%); transform: translate(-50%, 0); pointer-events: none; filter: blur(6px); }
+  .scaler { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; }
+  .model { position: absolute; transform-style: preserve-3d; }
+
+  /* panels: 354 / 354 / 348 px (3.6875in / 3.6875in / 3.625in at 96dpi) x 816px tall */
+  .panel { position: absolute; top: 0; height: 816px; transform-style: preserve-3d; }
+  .mid { left: -177px; width: 354px; }
+  .flap { left: 100%; width: 348px; transform-origin: 0 50%; }
+  .left { right: 100%; width: 354px; transform-origin: 100% 50%; }
+  .face { position: absolute; inset: 0; background-size: 100% 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .face.out { transform: rotateY(180deg); }
+  .face::after { content: ''; position: absolute; inset: 0; background: #000; opacity: var(--shade, 0); pointer-events: none; }
+  .edge { position: absolute; inset: 0; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25); pointer-events: none; }
+
+  .caption { text-align: center; padding: 0 16px; min-height: 44px; }
+  .caption b { display: block; font: 400 24px/1.1 'Instrument Serif', serif; }
+  .caption span { font-size: 13px; color: var(--muted); }
+
+  .controls { padding: 14px 16px 22px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  button { font: 500 13px/1 Inter, sans-serif; color: var(--btn-ink); background: var(--btn); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; cursor: pointer; }
+  button:hover, a.btn:hover { border-color: var(--accent); }
+  a.btn { font: 500 13px/1 Inter, sans-serif; color: var(--btn-ink); background: var(--btn); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .slider { display: flex; align-items: center; gap: 12px; width: min(460px, 100%); font: 400 11px/1 'DM Mono', monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  @media (max-width: 600px) { header { padding: 16px 16px 0; } h1 { font-size: 24px; } button, a.btn { padding: 9px 11px; font-size: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>OceanCrest AI <em>tri-fold</em></h1>
+  <p class="hint">Drag to spin · use the slider to fold</p>
+</header>
+
+<div class="stage" id="stage">
+  <div class="shadow" id="shadow"></div>
+  <div class="scaler" id="scaler">
+    <div class="model" id="model">
+      <div class="panel mid">
+        <div class="face in" style="background-image:url(assets/3d/in-middle.jpg)"><i class="edge"></i></div>
+        <div class="face out" style="background-image:url(assets/3d/out-back.jpg)"><i class="edge"></i></div>
+        <div class="panel flap" id="flap">
+          <div class="face in" style="background-image:url(assets/3d/in-right.jpg)"><i class="edge"></i></div>
+          <div class="face out" style="background-image:url(assets/3d/out-flap.jpg)"><i class="edge"></i></div>
+        </div>
+        <div class="panel left" id="left">
+          <div class="face in" style="background-image:url(assets/3d/in-left.jpg)"><i class="edge"></i></div>
+          <div class="face out" style="background-image:url(assets/3d/out-cover.jpg)"><i class="edge"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="caption" id="caption"><b>Front cover</b><span>What someone sees first.</span></div>
+
+<div class="controls">
+  <label class="slider">Open <input id="fold" type="range" min="0" max="1000" value="1000" aria-label="Fold amount"> Closed</label>
+  <div class="row">
+    <button data-go="cover">Front cover</button>
+    <button data-go="opened">Open the cover</button>
+    <button data-go="inside">Fully open</button>
+    <button data-go="outside">Outside of the sheet</button>
+    <button data-go="back">Back panel</button>
+    <button class="primary" id="tour">Play tour</button>
+  </div>
+  <div class="row">
+    <a class="btn" href="OceanCrest-AI-Trifold.pdf" download>↓ Download the print PDF (11 × 8.5 in, 2 pages)</a>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), scaler = $('scaler'), model = $('model'), flap = $('flap'), left = $('left'), shadow = $('shadow'), fold = $('fold'), caption = $('caption');
+  // state: t = 0 fully open (inside up) .. 0.5 flap tucked .. 1 closed; ry/rx = view rotation in degrees
+  const st = { t: 1, ry: -24, rx: 8 };
+  const clamp = v => Math.max(0, Math.min(1, v));
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+
+  function layout() {
+    const r = stage.getBoundingClientRect();
+    const open = 1 - clamp(st.t / 0.5);            // 1 when the flap is out
+    const coverOut = 1 - clamp((st.t - .5) / .5);  // 1 when the cover is open
+    const w = 354 + 348 * open + 354 * coverOut;
+    const s = Math.min(.82, (r.width - 32) / (w + 60), (r.height - 40) / 880);
+    scaler.style.transform = `scale(${s})`;
+    shadow.style.width = (w * s * 1.05) + 'px';
+    shadow.style.top = (r.height / 2 + 816 * s / 2 - 10) + 'px';
+  }
+
+  function render() {
+    const a = clamp(st.t / 0.5), c = clamp((st.t - 0.5) / 0.5);
+    const angA = -180 * a, angC = 180 * c;
+    flap.style.transform = `translateZ(${3 * a}px) rotateY(${angA}deg)`;
+    left.style.transform = `translateZ(${7 * c}px) rotateY(${angC}deg)`;
+    // soft shading while a panel is mid-fold
+    flap.style.setProperty('--shade', (Math.sin(Math.abs(angA) * Math.PI / 180) * .28).toFixed(3));
+    left.style.setProperty('--shade', (Math.sin(Math.abs(angC) * Math.PI / 180) * .28).toFixed(3));
+    // centre the visible footprint
+    const open = 1 - a, coverOut = 1 - c;
+    const shiftX = (354 * coverOut - 348 * open) / 2;
+    model.style.transform = `rotateX(${-st.rx}deg) rotateY(${st.ry}deg) translateX(${shiftX}px) translateY(-408px)`;
+    fold.value = Math.round(st.t * 1000);
+    layout();
+    describe();
+  }
+
+  function describe() {
+    const front = Math.cos(st.ry * Math.PI / 180) > 0;
+    let title, sub;
+    if (st.t > .8) [title, sub] = front ? ['Front cover', 'What someone sees first.'] : ['Back panel', 'Booking QR code, button and email.'];
+    else if (st.t > .35 && st.t < .65) [title, sub] = front ? ['Cover opened', 'How we work, next to the tuck-in flap with the stats.'] : ['Half open', 'Spin to the front to read it.'];
+    else if (st.t < .15) [title, sub] = front ? ['Fully open', 'The inside: how we work, two ways to start, the team.'] : ['Outside of the sheet', 'Flap · back · cover, as printed on side one.'];
+    else [title, sub] = ['Folding…', 'Panels fold right-then-left, flap tucks inside.'];
+    caption.innerHTML = `<b>${title}</b><span>${sub}</span>`;
+  }
+
+  let anim = null;
+  function to(target, ms = 1100) {
+    return new Promise(res => {
+      cancelAnimationFrame(anim);
+      const from = { ...st }, t0 = performance.now();
+      // spin the short way round
+      if (target.ry !== undefined) { while (target.ry - from.ry > 180) target.ry -= 360; while (target.ry - from.ry < -180) target.ry += 360; }
+      const step = now => {
+        const k = ease(clamp((now - t0) / ms));
+        for (const key in target) st[key] = from[key] + (target[key] - from[key]) * k;
+        render();
+        if (k < 1) anim = requestAnimationFrame(step); else res();
+      };
+      anim = requestAnimationFrame(step);
+    });
+  }
+
+  const views = {
+    cover:   { t: 1,   ry: -24, rx: 8 },
+    opened:  { t: .5,  ry: -10, rx: 6 },
+    inside:  { t: 0,   ry: 0,   rx: 4 },
+    outside: { t: 0,   ry: 180, rx: 4 },
+    back:    { t: 1,   ry: 156, rx: 8 },
+  };
+  document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { touring = false; to({ ...views[b.dataset.go] }); }));
+
+  let touring = false;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  async function tour() {
+    touring = true;
+    const seq = [['cover', 900], ['back', 1400], ['cover', 1400], ['opened', 1400], ['inside', 1400], ['outside', 1600], ['inside', 1600], ['cover', 1600]];
+    for (const [v, ms] of seq) { if (!touring) return; await to({ ...views[v] }, ms); await wait(1100); }
+    touring = false;
+  }
+  $('tour').addEventListener('click', () => { touring = false; setTimeout(tour, 0); });
+
+  fold.addEventListener('input', () => { touring = false; cancelAnimationFrame(anim); st.t = fold.value / 1000; render(); });
+
+  // drag to spin
+  let drag = null;
+  stage.addEventListener('pointerdown', e => { touring = false; cancelAnimationFrame(anim); drag = { x: e.clientX, y: e.clientY, ry: st.ry, rx: st.rx }; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', e => {
+    if (!drag) return;
+    st.ry = drag.ry + (e.clientX - drag.x) * .4;
+    st.rx = Math.max(-35, Math.min(35, drag.rx + (e.clientY - drag.y) * .25));
+    render();
+  });
+  const end = () => { drag = null; };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  addEventListener('resize', render);
+
+  render();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce) setTimeout(tour, 600);
+})();
+</script>
+</body>
+</html>
